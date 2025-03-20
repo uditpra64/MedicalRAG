@@ -1,21 +1,27 @@
 from openai import AzureOpenAI
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 class AzureOpenAIWrapper:
     """
     Azure OpenAI API wrapper class designed to be compatible with LangChain's interfaces.
-    API key, version, and endpoint are hardcoded in this implementation but can be
-    configured through environment variables or parameters.
+    API key, version, and endpoint can be configured through environment variables or parameters.
     """
 
+    # Default values - can be overridden by environment variables or constructor params
+    DEFAULT_API_KEY = "c9be74243d9e4db78346018b44592e9a"
+    DEFAULT_API_VERSION = "2024-02-15-preview"
+    DEFAULT_AZURE_ENDPOINT = "https://formaigpt.openai.azure.com"
+    DEFAULT_MODEL = "gpt-35-turbo"  
+
     def __init__(self, 
-                model="gpt-35-turbo", 
+                model=None, 
                 temperature=0,
                 api_key=None,
-                api_version="2024-02-15-preview",
-                azure_endpoint="https://formaigpt.openai.azure.com"):
+                api_version=None,
+                azure_endpoint=None):
         """
         Initialize the Azure OpenAI wrapper with the specified model and settings.
         
@@ -26,17 +32,21 @@ class AzureOpenAIWrapper:
             api_version: Azure OpenAI API version
             azure_endpoint: Azure OpenAI endpoint URL
         """
-        self.model = model
+        # Get values from environment variables or use provided parameters
+        self.model = model or os.getenv("AZURE_OPENAI_DEPLOYMENT", self.DEFAULT_MODEL)
         self.temperature = temperature
+        
+        # Log which model deployment we're using
+        logger.info(f"Using Azure OpenAI deployment: {self.model}")
         
         # Initialize Azure OpenAI client
         try:
             self.__client = AzureOpenAI(
-                api_key=api_key or "c9be74243d9e4db78346018b44592e9a",
-                api_version=api_version,
-                azure_endpoint=azure_endpoint,
+                api_key=api_key or os.getenv("AZURE_OPENAI_API_KEY", self.DEFAULT_API_KEY),
+                api_version=api_version or os.getenv("AZURE_OPENAI_API_VERSION", self.DEFAULT_API_VERSION),
+                azure_endpoint=azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", self.DEFAULT_AZURE_ENDPOINT),
             )
-            logger.debug(f"AzureOpenAIWrapper initialized with model {model}")
+            logger.debug(f"AzureOpenAIWrapper initialized with model {self.model}")
         except Exception as e:
             logger.error(f"Error initializing AzureOpenAIWrapper: {str(e)}")
             raise

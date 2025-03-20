@@ -11,7 +11,29 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Custom imports
+# Apply PyTorch workaround for Streamlit
+# This prevents Streamlit from watching PyTorch classes which causes the runtime error
+import torch
+# Save original __getattr__ function
+original_getattr = torch._classes.__getattr__
+
+def safe_getattr(self, attr):
+    """A patched getattr function that handles special attributes safely"""
+    if attr in ('__path__', '__file__', '__loader__', '__package__', '__spec__'):
+        # Return an empty list for __path__ to prevent Streamlit from watching this module
+        if attr == '__path__':
+            class EmptyPath:
+                _path = []
+            return EmptyPath()
+        # Return None for other special attributes
+        return None
+    # Call the original function for normal attributes
+    return original_getattr(self, attr)
+
+# Apply the patch
+torch._classes.__getattr__ = lambda attr: safe_getattr(torch._classes, attr)
+
+# Now it's safe to import our custom modules
 from src.main_application import MedicalDiseaseNameSearchSystem
 
 # Function to parse command-line arguments
@@ -37,7 +59,12 @@ def load_config(config_path):
         return {
             "embedding_model": "cambridgeltl/SapBERT-from-PubMedBERT-fulltext",
             "vector_store_path": "../data/vector_stores/sapbert_faiss",
-            "llm_model": "gpt-3.5-turbo",
+            "llm": {
+                "provider": "azure",
+                "model": "gpt-35-turbo",
+                "api_version": "2024-02-15-preview",
+                "azure_endpoint": "https://formaigpt.openai.azure.com"
+            },
             "confidence_threshold": 0.7
         }
 
@@ -65,8 +92,47 @@ def create_ui():
     with st.sidebar:
         st.header("Configuration")
         
-        # API key input
-        api_key = st.text_input("API Key (for LLM)", type="password")
+        # LLM Provider selection
+        llm_provider = st.selectbox(
+            "LLM Provider",
+            options=["azure", "openai"],
+            index=0 if config["llm"].get("provider", "azure") == "azure" else 1
+        )
+        
+        # API key input based on provider
+        if llm_provider == "azure":
+            api_key = st.text_input("Azure OpenAI API Key", type="password", 
+                                   help="Leave blank to use default key from wrapper")
+            api_key_env = "AZURE_OPENAI_API_KEY"
+            
+            # Azure-specific settings
+            azure_model = st.text_input(
+                "Azure OpenAI Model Deployment Name",
+                value=config["llm"].get("model", "gpt-35-turbo")
+            )
+            
+            azure_endpoint = st.text_input(
+                "Azure OpenAI Endpoint",
+                value=config["llm"].get("azure_endpoint", "https://formaigpt.openai.azure.com")
+            )
+            
+            azure_api_version = st.text_input(
+                "Azure OpenAI API Version",
+                value=config["llm"].get("api_version", "2024-02-15-preview")
+            )
+        else:
+            api_key = st.text_input("OpenAI API Key", type="password")
+            api_key_env = "OPENAI_API_KEY"
+            
+            # OpenAI model selection
+            openai_model = st.selectbox(
+                "OpenAI Model",
+                options=[
+                    "gpt-3.5-turbo",
+                    "gpt-4"
+                ],
+                index=0
+            )
         
         # Embedding model selection
         embedding_model = st.selectbox(
@@ -76,16 +142,6 @@ def create_ui():
                 "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext",
                 "emilyalsentzer/Bio_ClinicalBERT",
                 "allenai/scibert_scivocab_uncased"
-            ],
-            index=0
-        )
-        
-        # LLM model selection
-        llm_model = st.selectbox(
-            "LLM Model",
-            options=[
-                "gpt-3.5-turbo",
-                "gpt-4"
             ],
             index=0
         )
@@ -107,25 +163,39 @@ def create_ui():
         
         # Initialize button
         if st.button("Initialize System"):
-            if not api_key:
-                st.error("Please enter an API key")
+            if llm_provider == "openai" and not api_key:
+                st.error("Please enter an OpenAI API key")
             else:
                 with st.spinner("Initializing system..."):
-                    # Create or load system
+                    # Store API key in environment variable
+                    if api_key:
+                        os.environ[api_key_env] = api_key
+                    
+                    # Create the system
                     try:
-                        # Store API key in environment variable
-                        os.environ["OPENAI_API_KEY"] = api_key
+                        # Configuration for system initialization
+                        system_config = {
+                            "embedding_model_name": embedding_model,
+                            "vector_db_path": vector_db_path,
+                            "api_key": api_key or None
+                        }
                         
-                        # Create the system
-                        system = MedicalDiseaseNameSearchSystem(
-                            embedding_model_name=embedding_model,
-                            vector_db_path=vector_db_path,
-                            llm_model_name=llm_model,
-                            confidence_threshold=confidence_threshold
-                        )
+                        # Add provider-specific parameters
+                        if llm_provider == "azure":
+                            system_config.update({
+                                "llm_model_name": azure_model,
+                                "api_version": azure_api_version,
+                                "azure_endpoint": azure_endpoint
+                            })
+                        else:
+                            system_config["llm_model_name"] = openai_model
+                        
+                        # Initialize the system
+                        system = MedicalDiseaseNameSearchSystem(**system_config)
                         
                         # Store in session state
                         st.session_state.system = system
+                        st.session_state.llm_provider = llm_provider
                         st.success("System initialized successfully!")
                     except Exception as e:
                         st.error(f"Error initializing system: {e}")
@@ -302,13 +372,27 @@ def create_ui():
     st.header("System Information")
     
     if 'system' in st.session_state:
-        st.json({
+        provider_info = {
             "embedding_model": embedding_model,
-            "llm_model": llm_model,
             "vector_db_path": vector_db_path,
             "confidence_threshold": confidence_threshold,
             "system_status": "Initialized"
-        })
+        }
+        
+        # Add provider-specific information
+        if st.session_state.llm_provider == "azure":
+            provider_info.update({
+                "llm_provider": "Azure OpenAI",
+                "azure_model": azure_model,
+                "azure_endpoint": azure_endpoint
+            })
+        else:
+            provider_info.update({
+                "llm_provider": "OpenAI",
+                "openai_model": openai_model
+            })
+            
+        st.json(provider_info)
     else:
         st.info("System not initialized")
 

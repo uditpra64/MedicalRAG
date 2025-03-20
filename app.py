@@ -21,7 +21,12 @@ def load_config(config_path="config/app_config.yaml"):
         return {
             "embedding_model": "cambridgeltl/SapBERT-from-PubMedBERT-fulltext",
             "vector_store_path": "./data/vector_stores/sapbert_faiss",
-            "llm_model": "gpt-3.5-turbo",
+            "llm": {
+                "provider": "azure",
+                "model": "gpt-35-turbo",
+                "api_version": "2024-02-15-preview",
+                "azure_endpoint": "https://formaigpt.openai.azure.com"
+            },
             "confidence_threshold": 0.7
         }
 
@@ -40,6 +45,12 @@ def parse_arguments():
                         help="Process a single query")
     parser.add_argument("--model", type=str,
                         help="Override the embedding model")
+    parser.add_argument("--provider", type=str, choices=["azure", "openai"],
+                        help="LLM provider (azure or openai)")
+    parser.add_argument("--azure-model", type=str,
+                        help="Azure OpenAI model deployment name")
+    parser.add_argument("--azure-endpoint", type=str,
+                        help="Azure OpenAI endpoint URL")
     
     return parser.parse_args()
 
@@ -48,13 +59,9 @@ def main():
     # Load environment variables
     load_dotenv()
     
-    # Check for API key
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        logger.error("OPENAI_API_KEY environment variable not set")
-        print("Error: OPENAI_API_KEY environment variable not set")
-        print("Please set your OpenAI API key in the .env file or environment")
-        return
+    # Check for API keys
+    azure_api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
     
     # Parse command-line arguments
     args = parse_arguments()
@@ -66,16 +73,47 @@ def main():
     if args.model:
         config["embedding_model"] = args.model
     
+    if args.provider:
+        config["llm"]["provider"] = args.provider
+        
+    if args.azure_model:
+        config["llm"]["model"] = args.azure_model
+        
+    if args.azure_endpoint:
+        config["llm"]["azure_endpoint"] = args.azure_endpoint
+    
     # Import here to avoid circular imports
     from src.main_application import MedicalDiseaseNameSearchSystem
+    
+    # Determine which API key to use
+    if config["llm"]["provider"] == "azure":
+        if not azure_api_key:
+            logger.warning("AZURE_OPENAI_API_KEY environment variable not set")
+            print("Warning: AZURE_OPENAI_API_KEY environment variable not set")
+            print("Using default API key from AzureOpenAIWrapper")
+        api_key = azure_api_key
+        api_provider = "Azure OpenAI"
+    else:
+        if not openai_api_key:
+            logger.error("OPENAI_API_KEY environment variable not set")
+            print("Error: OPENAI_API_KEY environment variable not set")
+            print("Please set your OpenAI API key in the .env file or environment")
+            return
+        api_key = openai_api_key
+        api_provider = "OpenAI"
+    
+    logger.info(f"Using {api_provider} with model {config['llm']['model']}")
+    print(f"Using {api_provider} with model {config['llm']['model']}")
     
     # Initialize the system
     logger.info("Initializing Medical Disease Name Search System")
     system = MedicalDiseaseNameSearchSystem(
         embedding_model_name=config["embedding_model"],
         vector_db_path=config["vector_store_path"],
-        llm_model_name=config["llm_model"],
-        api_key=api_key
+        llm_model_name=config["llm"]["model"],
+        api_key=api_key,
+        api_version=config["llm"].get("api_version", "2024-02-15-preview"),
+        azure_endpoint=config["llm"].get("azure_endpoint", "https://formaigpt.openai.azure.com")
     )
     
     # Process a single query if provided
@@ -126,11 +164,13 @@ def main():
     else:
         print("Medical Disease Name Search System")
         print("Usage:")
-        print("  --query TEXT     Process a single query")
-        print("  --batch FILE     Process a batch file")
-        print("  --ui             Launch the Streamlit UI")
-        print("  --model NAME     Override the embedding model")
-        print("  --config FILE    Specify configuration file")
+        print("  --query TEXT       Process a single query")
+        print("  --batch FILE       Process a batch file")
+        print("  --ui               Launch the Streamlit UI")
+        print("  --model NAME       Override the embedding model")
+        print("  --provider NAME    LLM provider (azure or openai)")
+        print("  --azure-model NAME Azure OpenAI model deployment name")
+        print("  --config FILE      Specify configuration file")
         print("\nFor more information, use --help")
 
 if __name__ == "__main__":
