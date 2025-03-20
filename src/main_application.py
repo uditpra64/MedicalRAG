@@ -2,10 +2,10 @@ import os
 import logging
 import torch
 from typing import List, Dict, Any, Optional, Union
-from langchain_openai import ChatOpenAI
 
 # Import components
 from src.medical_rag_agent import MedicalRAG_Agent
+from src.azure_openai_wrapper import AzureOpenAIWrapper
 
 class MedicalDiseaseNameSearchSystem:
     """
@@ -17,9 +17,11 @@ class MedicalDiseaseNameSearchSystem:
         self, 
         embedding_model_name: str = "cambridgeltl/SapBERT-from-PubMedBERT-fulltext",
         vector_db_path: str = "./data/vector_stores/sapbert_faiss",
-        llm_model_name: str = "gpt-3.5-turbo",
+        llm_model_name: str = "gpt-35-turbo", # Default Azure model name
         confidence_threshold: float = 0.7,
         api_key: Optional[str] = None,
+        api_version: str = "2024-02-15-preview",
+        azure_endpoint: str = "https://formaigpt.openai.azure.com",
         device: Optional[str] = None
     ):
         """
@@ -28,9 +30,11 @@ class MedicalDiseaseNameSearchSystem:
         Args:
             embedding_model_name: Name of the medical embedding model
             vector_db_path: Path to store/load the vector database
-            llm_model_name: Name of the LLM model
+            llm_model_name: Name of the Azure OpenAI model deployment
             confidence_threshold: Threshold for confidence score
-            api_key: API key for the LLM (if not set in environment)
+            api_key: API key for Azure OpenAI (if not set in environment)
+            api_version: Azure OpenAI API version
+            azure_endpoint: Azure OpenAI endpoint URL
             device: Device to run embeddings on ('cpu' or 'cuda')
         """
         # Set up logger
@@ -42,11 +46,10 @@ class MedicalDiseaseNameSearchSystem:
         self.vector_db_path = vector_db_path
         self.llm_model_name = llm_model_name
         self.confidence_threshold = confidence_threshold
+        self.api_key = api_key
+        self.api_version = api_version
+        self.azure_endpoint = azure_endpoint
         
-        # Set API key if provided
-        if api_key:
-            os.environ["OPENAI_API_KEY"] = api_key
-            
         # Determine device (CPU/GPU)
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -61,9 +64,15 @@ class MedicalDiseaseNameSearchSystem:
     def _initialize_components(self):
         """Initialize system components."""
         try:
-            # Initialize LLM
-            self.llm = ChatOpenAI(model=self.llm_model_name, temperature=0)
-            self.logger.info(f"LLM initialized: {self.llm_model_name}")
+            # Initialize LLM using Azure OpenAI wrapper
+            self.llm = AzureOpenAIWrapper(
+                model=self.llm_model_name,
+                temperature=0,
+                api_key=self.api_key,
+                api_version=self.api_version,
+                azure_endpoint=self.azure_endpoint
+            )
+            self.logger.info(f"Azure OpenAI LLM initialized: {self.llm_model_name}")
             
             # Initialize Medical RAG
             self.medical_rag = MedicalRAG_Agent(

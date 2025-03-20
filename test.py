@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from langchain_openai import ChatOpenAI
+from src.azure_openai_wrapper import AzureOpenAIWrapper
 from src.medical_rag_agent import MedicalRAG_Agent
 
 # Function to create a sample medical database
@@ -79,20 +79,24 @@ def main():
     print("=" * 30)
     
     # Check for API key
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
     if not api_key:
-        print("Warning: OPENAI_API_KEY environment variable not set")
-        api_key = input("Please enter your OpenAI API key: ")
-        os.environ["OPENAI_API_KEY"] = api_key
+        print("Warning: AZURE_OPENAI_API_KEY environment variable not set")
+        print("Using default hardcoded API key")
+        api_key = None  # Will use the default in the wrapper
     
     # Create sample database if it doesn't exist
     database_file = "sample_medical_database.csv"
     if not os.path.exists(database_file):
         database_file = create_sample_database(database_file)
     
-    # Initialize LLM
-    print("\nInitializing LLM...")
-    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+    # Initialize LLM with Azure wrapper
+    print("\nInitializing Azure OpenAI LLM...")
+    llm = AzureOpenAIWrapper(
+        model="gpt-35-turbo",  # Use your Azure OpenAI deployment name
+        temperature=0,
+        api_key=api_key
+    )
     
     # Initialize Medical RAG with various medical embedding models
     embedding_models = [
