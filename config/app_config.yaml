@@ -1,0 +1,46 @@
+# Medical Disease Name Search System Configuration
+
+# Embedding Model Configuration
+embedding_model: "cambridgeltl/SapBERT-from-PubMedBERT-fulltext"  # Medical embedding model
+vector_store_path: "./data/vector_stores/sapbert_faiss"  # Path to vector database
+llm_model: "gpt-3.5-turbo"  # LLM model for generation
+
+# Search Configuration
+confidence_threshold: 0.7  # Threshold for confidence score (0.0-1.0)
+hybrid_search:
+  vector_weight: 0.6  # Weight for vector search
+  keyword_weight: 0.3  # Weight for keyword search
+  fuzzy_weight: 0.1  # Weight for fuzzy matching
+  top_k: 5  # Number of documents to retrieve
+  
+# Processing Configuration
+batch_size: 100  # Batch size for processing
+use_gpu: true  # Whether to use GPU if available
+max_tokens: 1000  # Maximum token limit for LLM
+temperature: 0.0  # Temperature for LLM
+
+# UI Configuration
+ui:
+  page_title: "Medical Disease Name Search System"
+  page_icon: "🏥"
+  theme: "light"  # light or dark
+  max_width: 1200  # Maximum width for the UI
+
+# Data Configuration
+data:
+  default_database: "./data/medical_database.csv"
+  icd10_database: "./data/icd10_codes.csv"
+  snomed_ct_folder: "./data/snomed_ct/"
+  
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_dir: "./logs"
+  log_to_console: true
+  log_to_file: true
+
+# System Configuration
+system:
+  cache_enabled: true  # Enable caching
+  cache_dir: "./cache"
+  timeout: 30  # Timeout in seconds
