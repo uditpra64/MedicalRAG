@@ -172,9 +172,12 @@ class MedicalRAG_Agent:
         logger.info(f"Loading vector store from {self.vector_store_path}")
         
         try:
+            # Set allow_dangerous_deserialization flag to True
+            # Note: Only use this with trusted data sources
             self.vectorstore = FAISS.load_local(
                 folder_path=self.vector_store_path,
-                embeddings=self.embedding
+                embeddings=self.embedding,
+                allow_dangerous_deserialization=True  # Add this parameter
             )
             
             logger.info("Vector store loaded successfully")
@@ -187,7 +190,7 @@ class MedicalRAG_Agent:
         except Exception as e:
             logger.error(f"Error loading vector store: {e}")
             return False
-    
+        
     def _create_rag_chain(self):
         """Create the RAG chain for medical term standardization."""
         if self.vectorstore is None:
@@ -312,6 +315,85 @@ class MedicalRAG_Agent:
                 "error": str(e),
                 "needs_human_review": True
             }
+
+    def create_hybrid_retriever(self):
+        """
+        Create a hybrid retriever that combines vector, keyword, and fuzzy matching.
+        
+        This implements the hybrid search mentioned in the PDF:
+        - Semantic search (vector similarity)
+        - Keyword search (BM25)
+        - Edit distance-based fuzzy matching
+        - Ensemble combining these methods with configurable weights
+        """
+        if self.vectorstore is None:
+            logger.error("Vector store not initialized")
+            return None
+        
+        logger.info("Creating hybrid retriever")
+        
+        # 1. Vector search retriever
+        vector_retriever = self.vectorstore.as_retriever(
+            search_type="similarity",
+            search_kwargs={"k": 5}
+        )
+        
+        # 2. BM25 keyword retriever
+        from langchain_community.retrievers import BM25Retriever
+        
+        # Get all documents from vector store to create BM25 index
+        # This is a simplification - in production you'd want to use the original documents
+        documents = self.vectorstore.get()
+        
+        bm25_retriever = BM25Retriever.from_documents(documents)
+        bm25_retriever.k = 5
+        
+        # 3. Fuzzy matching retriever using Levenshtein distance
+        from langchain_core.retrievers import BaseRetriever
+        import Levenshtein
+        
+        class FuzzyRetriever(BaseRetriever):
+            def __init__(self, documents, k=5):
+                self.documents = documents
+                self.k = k
+                
+            def get_relevant_documents(self, query):
+                # Calculate Levenshtein distance for each document
+                scored_docs = []
+                for doc in self.documents:
+                    # Use minimum distance among content chunks
+                    chunks = doc.page_content.split()
+                    min_distance = min(Levenshtein.distance(query, chunk) for chunk in chunks)
+                    
+                    # Normalize by length and convert to similarity score
+                    max_len = max(len(query), max(len(chunk) for chunk in chunks))
+                    score = 1 - (min_distance / max_len if max_len > 0 else 0)
+                    
+                    scored_docs.append((doc, score))
+                
+                # Sort by score (highest first) and take top k
+                scored_docs.sort(key=lambda x: x[1], reverse=True)
+                return [doc for doc, _ in scored_docs[:self.k]]
+        
+        fuzzy_retriever = FuzzyRetriever(documents, k=5)
+        
+        # 4. Create ensemble retriever
+        from langchain_community.retrievers import EnsembleRetriever
+        
+        # Configure weights for each retriever
+        weights = {
+            "vector": 0.6,  # Vector search gets highest weight
+            "bm25": 0.3,    # Keyword search
+            "fuzzy": 0.1    # Fuzzy matching gets lowest weight
+        }
+        
+        ensemble_retriever = EnsembleRetriever(
+            retrievers=[vector_retriever, bm25_retriever, fuzzy_retriever],
+            weights=[weights["vector"], weights["bm25"], weights["fuzzy"]]
+        )
+        
+        logger.info("Hybrid retriever created successfully")
+        return ensemble_retriever
 
 
 # Example usage:

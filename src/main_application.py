@@ -6,6 +6,8 @@ from typing import List, Dict, Any, Optional, Union
 # Import components
 from src.medical_rag_agent import MedicalRAG_Agent
 from src.azure_openai_wrapper import AzureOpenAIWrapper
+from src.medical_ontology import MedicalOntologyManager
+from src.feedback_manager import FeedbackManager
 
 class MedicalDiseaseNameSearchSystem:
     """
@@ -17,7 +19,7 @@ class MedicalDiseaseNameSearchSystem:
         self, 
         embedding_model_name: str = "cambridgeltl/SapBERT-from-PubMedBERT-fulltext",
         vector_db_path: str = "./data/vector_stores/sapbert_faiss",
-        llm_model_name: str = "gpt-35-turbo", # Default Azure model name
+        llm_model_name: str = "gptest", # Default Azure model name
         confidence_threshold: float = 0.7,
         api_key: Optional[str] = None,
         api_version: str = "2024-02-15-preview",
@@ -60,7 +62,24 @@ class MedicalDiseaseNameSearchSystem:
         
         # Initialize components
         self._initialize_components()
-        
+
+        self.ontology_manager = MedicalOntologyManager(
+            icd10_path=config.get("data", {}).get("icd10_database"),
+            snomed_ct_path=config.get("data", {}).get("snomed_ct_folder")
+        )
+        self.feedback_manager = FeedbackManager()
+
+    def record_expert_feedback(self, query, system_diagnosis, expert_diagnosis, is_correct, expert_notes=None):
+        '''Record expert feedback for a diagnosis.'''
+        return self.feedback_manager.record_feedback(
+            query=query,
+            system_diagnosis=system_diagnosis,
+            expert_diagnosis=expert_diagnosis,
+            confidence_score=self.last_confidence_score,
+            is_correct=is_correct,
+            expert_notes=expert_notes
+        )
+
     def _initialize_components(self):
         """Initialize system components."""
         try:
@@ -158,6 +177,18 @@ class MedicalDiseaseNameSearchSystem:
             self.logger.info(f"Result: {parsed_result['standard_diagnosis']} " 
                             f"(confidence: {parsed_result['confidence_score']:.2f})")
             
+            # Store last confidence score for feedback
+            self.last_confidence_score = parsed_result['confidence_score']
+
+            # Queue for expert review if confidence is low or needs human review
+            if parsed_result['confidence_score'] < 0.9 or parsed_result.get('needs_human_review', False):
+                self.feedback_manager.queue_for_expert_review(
+                    query=expression,
+                    system_diagnosis=parsed_result['standard_diagnosis'],
+                    confidence_score=parsed_result['confidence_score'],
+                    alternative_diagnoses=parsed_result.get('alternative_diagnoses', [])
+                )
+
             return parsed_result
             
         except Exception as e:
@@ -212,10 +243,8 @@ class MedicalDiseaseNameSearchSystem:
             dict: Related ontology information (ICD-10, SNOMED CT, etc.)
         """
         # This would be implemented when medical_ontology module is available
-        return {
-            "icd10": "Not implemented yet",
-            "snomed_ct": "Not implemented yet"
-        }
+        return self.ontology_manager.get_ontology_data(disease_name)
+    
         
     def evaluate(self, test_data_path: str) -> Dict[str, Any]:
         """
