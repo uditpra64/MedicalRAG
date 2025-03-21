@@ -50,12 +50,4 @@ Thumbs.db
 # qmake の一時ファイル
 *.qmake.stash
 
-# Qt Designer で作成した .ui ファイルから自動生成される Python モジュール
-# （自動生成ファイルを追跡しない場合は、コメントアウトを外して有効にしてください）
-# ui_*.py
 
-# テストデータ
-data/
-修正計画.md
-修正計画.pdf
-*.zip

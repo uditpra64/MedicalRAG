@@ -24,7 +24,9 @@ class MedicalDiseaseNameSearchSystem:
         api_key: Optional[str] = None,
         api_version: str = "2024-02-15-preview",
         azure_endpoint: str = "https://formaigpt.openai.azure.com",
-        device: Optional[str] = None
+        device: Optional[str] = None,
+        icd10_path: Optional[str] = None,
+        snomed_ct_path: Optional[str] = None
     ):
         """
         Initialize the Medical Disease Name Search System.
@@ -38,6 +40,8 @@ class MedicalDiseaseNameSearchSystem:
             api_version: Azure OpenAI API version
             azure_endpoint: Azure OpenAI endpoint URL
             device: Device to run embeddings on ('cpu' or 'cuda')
+            icd10_path: Path to ICD-10 data file
+            snomed_ct_path: Path to SNOMED CT data folder
         """
         # Set up logger
         self.logger = logging.getLogger(__name__)
@@ -64,8 +68,8 @@ class MedicalDiseaseNameSearchSystem:
         self._initialize_components()
 
         self.ontology_manager = MedicalOntologyManager(
-            icd10_path=config.get("data", {}).get("icd10_database"),
-            snomed_ct_path=config.get("data", {}).get("snomed_ct_folder")
+            icd10_path=icd10_path,
+            snomed_ct_path=snomed_ct_path
         )
         self.feedback_manager = FeedbackManager()
 

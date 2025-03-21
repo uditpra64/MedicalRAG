@@ -27,10 +27,14 @@ class MedicalOntologyManager:
         # Load ICD-10 if path provided
         if icd10_path and os.path.exists(icd10_path):
             self._load_icd10(icd10_path)
+        else:
+            logger.warning(f"ICD-10 data path not provided or does not exist: {icd10_path}")
         
         # Load SNOMED CT if path provided
         if snomed_ct_path and os.path.exists(snomed_ct_path):
             self._load_snomed_ct(snomed_ct_path)
+        else:
+            logger.warning(f"SNOMED CT data path not provided or does not exist: {snomed_ct_path}")
     
     def _load_icd10(self, file_path: str) -> bool:
         """
@@ -188,19 +192,3 @@ class MedicalOntologyManager:
             "icd10": self.get_icd10_code(disease_name),
             "snomed_ct": self.get_snomed_code(disease_name)
         }
-
-
-# Usage in main_application.py:
-"""
-from src.medical_ontology import MedicalOntologyManager
-
-# In MedicalDiseaseNameSearchSystem.__init__:
-self.ontology_manager = MedicalOntologyManager(
-    icd10_path=config.get("data", {}).get("icd10_database"),
-    snomed_ct_path=config.get("data", {}).get("snomed_ct_folder")
-)
-
-# Update the get_medical_ontologies method:
-def get_medical_ontologies(self, disease_name: str) -> Dict[str, Any]:
-    return self.ontology_manager.get_ontology_data(disease_name)
-"""

@@ -1,7 +1,6 @@
 import os
 import logging
 from typing import List, Optional
-
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader, CSVLoader
@@ -177,7 +176,7 @@ class MedicalRAG_Agent:
             self.vectorstore = FAISS.load_local(
                 folder_path=self.vector_store_path,
                 embeddings=self.embedding,
-                allow_dangerous_deserialization=True  # Add this parameter
+                allow_dangerous_deserialization=True  
             )
             
             logger.info("Vector store loaded successfully")
