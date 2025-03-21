@@ -14,27 +14,34 @@ import json
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Apply PyTorch workaround for Streamlit
-# This prevents Streamlit from watching PyTorch classes which causes the runtime error
 import torch, torchvision, torchaudio
-# Save original __getattr__ function
-original_getattr = torch._classes.__getattr__
 
-def safe_getattr(self, attr):
-    """A patched getattr function that handles special attributes safely"""
-    if attr in ('__path__', '__file__', '__loader__', '__package__', '__spec__'):
-        # Return an empty list for __path__ to prevent Streamlit from watching this module
-        if attr == '__path__':
-            class EmptyPath:
-                _path = []
-            return EmptyPath()
-        # Return None for other special attributes
-        return None
-    # Call the original function for normal attributes
-    return original_getattr(self, attr)
-
-# Apply the patch
-torch._classes.__getattr__ = lambda attr: safe_getattr(torch._classes, attr)
+try:
+    # First check if _classes exists
+    if hasattr(torch, '_classes'):
+        # Create a simple module wrapper to avoid Streamlit's file watcher issues
+        class SafeClassesModule:
+            def __init__(self, original_module):
+                self._original_module = original_module
+            
+            def __getattr__(self, name):
+                # Handle special attributes that Streamlit looks for
+                if name in ('__path__', '__file__', '__loader__', '__package__', '__spec__'):
+                    if name == '__path__':
+                        class EmptyPath:
+                            _path = []
+                        return EmptyPath()
+                    return None
+                
+                # For all other attributes, delegate to the original module
+                return getattr(self._original_module, name)
+        
+        # Apply the patch by replacing the module with our safe wrapper
+        torch._classes = SafeClassesModule(torch._classes)
+        print("Applied PyTorch workaround for Streamlit compatibility")
+except Exception as e:
+    print(f"Note: PyTorch workaround not applied: {e}")
+    print("If you encounter Streamlit errors with PyTorch, you may need to update the workaround")
 
 # Now it's safe to import our custom modules
 from src.main_application import MedicalDiseaseNameSearchSystem
@@ -257,70 +264,101 @@ def create_ui():
             
             # Handle query processing (existing code)
             if process_button and query:
-                # ... existing code for processing query ...
-                
-                # Add ontology information if available
-                if 'system' in st.session_state and hasattr(st.session_state.system, 'get_medical_ontologies'):
-                    try:
-                        ontology_data = st.session_state.system.get_medical_ontologies(result["standard_diagnosis"])
-                        
-                        # Display ontology data in expander
-                        with st.expander("Medical Ontology Information"):
-                            # ICD-10 codes
-                            if ontology_data["icd10"]:
-                                st.subheader("ICD-10 Codes")
-                                for code in ontology_data["icd10"]:
-                                    st.write(f"**{code['code']}**: {code['description']}")
-                            else:
-                                st.info("No ICD-10 codes found")
+                if 'system' not in st.session_state:
+                    st.error("Please initialize the system first")
+                else:
+                    with st.spinner("Processing query..."):
+                        try:
+                            # Process the query
+                            result = st.session_state.system.convert_medical_expression(query)
                             
-                            # SNOMED CT codes
-                            if ontology_data["snomed_ct"]:
-                                st.subheader("SNOMED CT Codes")
-                                for code in ontology_data["snomed_ct"]:
-                                    st.write(f"**{code['concept_id']}**: {code['term']}")
-                            else:
-                                st.info("No SNOMED CT codes found")
-                    except Exception as e:
-                        st.warning(f"Could not load ontology data: {e}")
-                
-                # Add expert feedback form
-                with st.expander("Provide Expert Feedback"):
-                    st.write("Help improve the system by providing expert feedback:")
-                    
-                    # Correct diagnosis field
-                    expert_diagnosis = st.text_input(
-                        "Correct diagnosis (if different from system diagnosis)",
-                        value=result["standard_diagnosis"]
-                    )
-                    
-                    # Is correct checkbox
-                    is_correct = st.checkbox(
-                        "System diagnosis is correct",
-                        value=expert_diagnosis == result["standard_diagnosis"]
-                    )
-                    
-                    # Expert notes
-                    expert_notes = st.text_area(
-                        "Additional notes or comments"
-                    )
-                    
-                    # Submit button
-                    if st.button("Submit Feedback"):
-                        if 'system' in st.session_state and hasattr(st.session_state.system, 'record_expert_feedback'):
-                            try:
-                                st.session_state.system.record_expert_feedback(
-                                    query=query,
-                                    system_diagnosis=result["standard_diagnosis"],
-                                    expert_diagnosis=expert_diagnosis,
-                                    is_correct=is_correct,
-                                    expert_notes=expert_notes
+                            # Display results
+                            st.subheader("Standard Diagnosis")
+                            st.write(f"**{result['standard_diagnosis']}**")
+                            
+                            # Show confidence
+                            confidence_color = "green" if result['confidence_score'] >= 0.9 else "orange" if result['confidence_score'] >= 0.7 else "red"
+                            st.markdown(f"**Confidence:** <span style='color:{confidence_color}'>{result['confidence_score']:.2f}</span>", unsafe_allow_html=True)
+                            
+                            # Show alternatives if available
+                            if result.get('alternative_diagnoses'):
+                                st.subheader("Alternative Diagnoses")
+                                for alt in result['alternative_diagnoses']:
+                                    st.write(f"- {alt}")
+                            
+                            # Show if needs review
+                            if result.get('needs_human_review', False):
+                                st.warning("⚠️ This case needs human review")
+                            
+                            # Show reasoning
+                            if result.get('reasoning'):
+                                st.subheader("Reasoning")
+                                st.write(result['reasoning'])
+                            
+                            # Add ontology information if available
+                            if hasattr(st.session_state.system, 'get_medical_ontologies'):
+                                try:
+                                    ontology_data = st.session_state.system.get_medical_ontologies(result["standard_diagnosis"])
+                                    
+                                    # Display ontology data in expander
+                                    with st.expander("Medical Ontology Information"):
+                                        # ICD-10 codes
+                                        if ontology_data["icd10"]:
+                                            st.subheader("ICD-10 Codes")
+                                            for code in ontology_data["icd10"]:
+                                                st.write(f"**{code['code']}**: {code['description']}")
+                                        else:
+                                            st.info("No ICD-10 codes found")
+                                        
+                                        # SNOMED CT codes
+                                        if ontology_data["snomed_ct"]:
+                                            st.subheader("SNOMED CT Codes")
+                                            for code in ontology_data["snomed_ct"]:
+                                                st.write(f"**{code['concept_id']}**: {code['term']}")
+                                        else:
+                                            st.info("No SNOMED CT codes found")
+                                except Exception as e:
+                                    st.warning(f"Could not load ontology data: {e}")
+                            
+                            # Add expert feedback form
+                            with st.expander("Provide Expert Feedback"):
+                                st.write("Help improve the system by providing expert feedback:")
+                                
+                                # Correct diagnosis field
+                                expert_diagnosis = st.text_input(
+                                    "Correct diagnosis (if different from system diagnosis)",
+                                    value=result["standard_diagnosis"]
                                 )
-                                st.success("Feedback submitted successfully!")
-                            except Exception as e:
-                                st.error(f"Error submitting feedback: {e}")
-                        else:
-                            st.error("System not initialized properly for feedback")
+                                
+                                # Is correct checkbox
+                                is_correct = st.checkbox(
+                                    "System diagnosis is correct",
+                                    value=expert_diagnosis == result["standard_diagnosis"]
+                                )
+                                
+                                # Expert notes
+                                expert_notes = st.text_area(
+                                    "Additional notes or comments"
+                                )
+                                
+                                # Submit button
+                                if st.button("Submit Feedback"):
+                                    if hasattr(st.session_state.system, 'record_expert_feedback'):
+                                        try:
+                                            st.session_state.system.record_expert_feedback(
+                                                query=query,
+                                                system_diagnosis=result["standard_diagnosis"],
+                                                expert_diagnosis=expert_diagnosis,
+                                                is_correct=is_correct,
+                                                expert_notes=expert_notes
+                                            )
+                                            st.success("Feedback submitted successfully!")
+                                        except Exception as e:
+                                            st.error(f"Error submitting feedback: {e}")
+                                    else:
+                                        st.error("System not initialized properly for feedback")
+                        except Exception as e:
+                            st.error(f"Error processing query: {e}")
     
     # Tab 2: Batch Processing
     with tabs[1]:
@@ -353,25 +391,105 @@ def create_ui():
         
         # Batch processing
         if batch_button and batch_file:
-            # ... existing batch processing code ...
-            
-            # Add option to queue all low confidence items for review
-            if auto_queue_review and 'system' in st.session_state:
-                try:
-                    low_confidence = results_df[results_df["confidence_score"] < confidence_threshold]
-                    
-                    if not low_confidence.empty:
-                        st.info(f"Queueing {len(low_confidence)} items for expert review")
+            if 'system' not in st.session_state:
+                st.error("Please initialize the system first")
+            else:
+                with st.spinner("Processing batch..."):
+                    try:
+                        # Save uploaded file temporarily
+                        temp_path = "temp_batch_queries.csv"
+                        with open(temp_path, "wb") as f:
+                            f.write(batch_file.getvalue())
                         
-                        for _, row in low_confidence.iterrows():
-                            st.session_state.system.feedback_manager.queue_for_expert_review(
-                                query=row["query"],
-                                system_diagnosis=row["standard_diagnosis"],
-                                confidence_score=row["confidence_score"]
-                            )
-                except Exception as e:
-                    st.warning(f"Could not queue items for review: {e}")
-    
+                        # Read the CSV
+                        df = pd.read_csv(temp_path)
+                        
+                        # Verify 'query' column exists
+                        if 'query' not in df.columns:
+                            st.error("CSV file must contain a 'query' column")
+                        else:
+                            # Process each query
+                            results = []
+                            progress_bar = st.progress(0)
+                            status_text = st.empty()
+                            
+                            for i, row in enumerate(df.iterrows()):
+                                query = row[1]['query']
+                                status_text.text(f"Processing query {i+1}/{len(df)}: {query[:30]}...")
+                                
+                                # Process the query
+                                result = st.session_state.system.convert_medical_expression(query)
+                                
+                                # Prepare result dictionary
+                                result_dict = {
+                                    'query': query,
+                                    'standard_diagnosis': result['standard_diagnosis'],
+                                    'confidence_score': result['confidence_score'],
+                                    'needs_human_review': result.get('needs_human_review', False),
+                                }
+                                
+                                # Add alternatives if available
+                                if result.get('alternative_diagnoses'):
+                                    result_dict['alternative_diagnoses'] = ', '.join(result['alternative_diagnoses'])
+                                
+                                # Add reasoning if available
+                                if result.get('reasoning'):
+                                    result_dict['reasoning'] = result['reasoning']
+                                
+                                # Add any other columns from the input
+                                for col in df.columns:
+                                    if col != 'query' and col not in result_dict:
+                                        result_dict[col] = row[1][col]
+                                
+                                results.append(result_dict)
+                                progress_bar.progress((i + 1) / len(df))
+                            
+                            # Create results dataframe
+                            results_df = pd.DataFrame(results)
+                            
+                            # Reset status
+                            status_text.text("Processing complete!")
+                            
+                            # Display results
+                            st.subheader("Batch Processing Results")
+                            st.dataframe(results_df)
+                            
+                            # Save results to CSV
+                            output_file = "batch_results.csv"
+                            results_df.to_csv(output_file, index=False)
+                            
+                            # Provide download link
+                            with open(output_file, "rb") as file:
+                                st.download_button(
+                                    label="Download Results CSV",
+                                    data=file,
+                                    file_name="batch_results.csv",
+                                    mime="text/csv"
+                                )
+                            
+                            # Option to queue low confidence items for review
+                            if auto_queue_review:
+                                low_confidence = results_df[results_df["confidence_score"] < confidence_threshold]
+                                
+                                if not low_confidence.empty:
+                                    st.info(f"Queueing {len(low_confidence)} items for expert review")
+                                    
+                                    for _, row in low_confidence.iterrows():
+                                        st.session_state.system.feedback_manager.queue_for_expert_review(
+                                            query=row["query"],
+                                            system_diagnosis=row["standard_diagnosis"],
+                                            confidence_score=row["confidence_score"],
+                                            alternative_diagnoses=row.get("alternative_diagnoses", "").split(", ") if pd.notna(row.get("alternative_diagnoses", "")) else []
+                                        )
+                        
+                        # Clean up temporary file
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                        if os.path.exists(output_file):
+                            os.remove(output_file)
+                            
+                    except Exception as e:
+                        st.error(f"Error processing batch: {e}")
     # Tab 3: Expert Review Queue
     with tabs[2]:
         st.header("Expert Review Queue")

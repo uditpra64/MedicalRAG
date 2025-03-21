@@ -198,11 +198,17 @@ class MedicalRAG_Agent:
         
         logger.debug("Creating RAG chain")
         
-        # Create retriever
-        retriever = self.vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": 5}
-        )
+        # Try to create hybrid retriever first, fall back to simple retriever if it fails
+        try:
+            retriever = self.create_hybrid_retriever()
+            logger.info("Using hybrid retriever with vector, keyword, and fuzzy matching")
+        except Exception as e:
+            logger.warning(f"Could not create hybrid retriever: {e}. Falling back to vector retriever.")
+            # Fall back to simple vector retriever
+            retriever = self.vectorstore.as_retriever(
+                search_type="similarity",
+                search_kwargs={"k": 5}
+            )
         
         # Create prompt for medical term standardization
         template = """
@@ -240,7 +246,6 @@ class MedicalRAG_Agent:
         )
         
         logger.debug("RAG chain created successfully")
-    
     def standardize_term(self, query: str) -> str:
         """
         Standardize a non-standard medical term using the RAG system.
@@ -337,65 +342,71 @@ class MedicalRAG_Agent:
             search_kwargs={"k": 5}
         )
         
-        # 2. BM25 keyword retriever
-        from langchain_community.retrievers import BM25Retriever
-        
-        # Get all documents from vector store to create BM25 index
-        # This is a simplification - in production you'd want to use the original documents
-        documents = self.vectorstore.get()
-        
-        bm25_retriever = BM25Retriever.from_documents(documents)
-        bm25_retriever.k = 5
-        
-        # 3. Fuzzy matching retriever using Levenshtein distance
-        from langchain_core.retrievers import BaseRetriever
-        import Levenshtein
-        
-        class FuzzyRetriever(BaseRetriever):
-            def __init__(self, documents, k=5):
-                self.documents = documents
-                self.k = k
+        try:
+            # Get all documents for BM25 and fuzzy matching
+            all_docs = self.vectorstore.similarity_search("medical disease health condition symptoms", k=100)
+            logger.info(f"Retrieved {len(all_docs)} documents for BM25 and fuzzy matching")
+            
+            if len(all_docs) < 5:
+                logger.warning(f"Only retrieved {len(all_docs)} documents, falling back to vector search only")
+                return vector_retriever
+            
+            # 2. BM25 keyword retriever
+            from langchain_community.retrievers import BM25Retriever
+            bm25_retriever = BM25Retriever.from_documents(all_docs)
+            bm25_retriever.k = 5
+            
+            # 3. Create custom FuzzyRetriever using lower-level approach to avoid compatibility issues
+            import Levenshtein
+            from langchain.schema import BaseRetriever, Document
+            
+            class CustomFuzzyRetriever(BaseRetriever):
+                def __init__(self, documents, top_k=5):
+                    self.documents = documents
+                    self.top_k = top_k
+                    super().__init__()
                 
-            def get_relevant_documents(self, query):
-                # Calculate Levenshtein distance for each document
-                scored_docs = []
-                for doc in self.documents:
-                    # Use minimum distance among content chunks
-                    chunks = doc.page_content.split()
-                    min_distance = min(Levenshtein.distance(query, chunk) for chunk in chunks)
+                def _get_relevant_documents(self, query, *, run_manager=None):
+                    # Calculate Levenshtein distance for each document
+                    scored_docs = []
+                    for doc in self.documents:
+                        # Break document into words
+                        words = doc.page_content.split()
+                        best_score = 0
+                        
+                        # Find the best matching word
+                        for word in words:
+                            if len(word) >= 4:  # Only consider words with 4+ characters
+                                # Calculate normalized Levenshtein distance
+                                max_len = max(len(query), len(word))
+                                if max_len > 0:
+                                    distance = Levenshtein.distance(query.lower(), word.lower())
+                                    score = 1 - (distance / max_len)
+                                    best_score = max(best_score, score)
+                        
+                        scored_docs.append((doc, best_score))
                     
-                    # Normalize by length and convert to similarity score
-                    max_len = max(len(query), max(len(chunk) for chunk in chunks))
-                    score = 1 - (min_distance / max_len if max_len > 0 else 0)
-                    
-                    scored_docs.append((doc, score))
-                
-                # Sort by score (highest first) and take top k
-                scored_docs.sort(key=lambda x: x[1], reverse=True)
-                return [doc for doc, _ in scored_docs[:self.k]]
+                    # Sort by score and return top results
+                    scored_docs.sort(key=lambda x: x[1], reverse=True)
+                    return [doc for doc, _ in scored_docs[:self.top_k]]
+            
+            # Initialize fuzzy retriever with documents
+            fuzzy_retriever = CustomFuzzyRetriever(all_docs)
+            
+            # 4. Create ensemble retriever with weights
+            from langchain_community.retrievers import EnsembleRetriever
+            ensemble_retriever = EnsembleRetriever(
+                retrievers=[vector_retriever, bm25_retriever, fuzzy_retriever],
+                weights=[0.6, 0.3, 0.1]  # 60% vector, 30% BM25, 10% fuzzy
+            )
+            
+            logger.info("Hybrid retriever created successfully")
+            return ensemble_retriever
         
-        fuzzy_retriever = FuzzyRetriever(documents, k=5)
-        
-        # 4. Create ensemble retriever
-        from langchain_community.retrievers import EnsembleRetriever
-        
-        # Configure weights for each retriever
-        weights = {
-            "vector": 0.6,  # Vector search gets highest weight
-            "bm25": 0.3,    # Keyword search
-            "fuzzy": 0.1    # Fuzzy matching gets lowest weight
-        }
-        
-        ensemble_retriever = EnsembleRetriever(
-            retrievers=[vector_retriever, bm25_retriever, fuzzy_retriever],
-            weights=[weights["vector"], weights["bm25"], weights["fuzzy"]]
-        )
-        
-        logger.info("Hybrid retriever created successfully")
-        return ensemble_retriever
-
-
-# Example usage:
+        except Exception as e:
+            logger.error(f"Error creating hybrid retriever: {e}")
+            logger.info("Falling back to vector search only")
+            return vector_retriever
 """
 # Initialize with OpenAI LLM
 from langchain_openai import ChatOpenAI
