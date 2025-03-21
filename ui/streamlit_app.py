@@ -383,7 +383,8 @@ def create_ui():
         # ICD-10 path
         icd10_path = st.text_input(
             "ICD-10 Database Path", 
-            value=detected_paths["icd10_path"] or config.get("data", {}).get("icd10_database", "./data/icd10_codes.csv")
+            value=detected_paths["icd10_path"] or config.get("data", {}).get("icd10_database", "./data/icd10_codes.csv"),
+            key="sidebar_icd10_path"
         )
         
         # Initialize button
@@ -910,18 +911,20 @@ def create_ui():
         # Ontology settings
         st.subheader("Medical Ontology Settings")
         
-        icd10_path = st.text_input(
+        icd10_path_settings = st.text_input(
             "ICD-10 Database Path",
-            value=config.get("data", {}).get("icd10_database", "./data/icd10_codes.csv")
+            value=config.get("data", {}).get("icd10_database", "./data/icd10_codes.csv"),
+            key="settings_icd10_path"
         )
         
-        snomed_path = st.text_input(
+        snomed_path_settings = st.text_input(
             "SNOMED CT Folder Path",
-            value=config.get("data", {}).get("snomed_ct_folder", "./data/snomed_ct/")
+            value=config.get("data", {}).get("snomed_ct_folder", "./data/snomed_ct/"),
+            key="settings_snomed_path"
         )
         
         # Save settings button
-        if st.button("Save Settings"):
+        if st.button("Save Settings", key="save_settings_button"):
             # Update configuration
             config["hybrid_search"] = {
                 "vector_weight": vector_weight,
@@ -930,8 +933,8 @@ def create_ui():
             }
             
             config["data"] = {
-                "icd10_database": icd10_path,
-                "snomed_ct_folder": snomed_path
+                "icd10_database": icd10_path_settings,
+                "snomed_ct_folder": snomed_path_settings
             }
             
             # Save to file
