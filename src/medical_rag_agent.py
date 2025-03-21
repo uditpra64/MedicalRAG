@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader, CSVLoader
@@ -9,13 +9,69 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
-
+from langchain_core.retrievers import BaseRetriever
+import Levenshtein
 # Setup logging
 logger = logging.getLogger(__name__)
 
 def format_docs(docs):
     """Format documents into a single string for the LLM context."""
     return "\n\n".join(doc.page_content for doc in docs)
+
+class CustomFuzzyRetriever(BaseRetriever):
+    """Custom retriever using Levenshtein distance for fuzzy matching.
+    
+    This version is compatible with Pydantic V2 and newer LangChain versions.
+    """
+    
+    # Define class attributes with type annotations
+    # These become Pydantic model fields in the new format
+    docs: List[Document]
+    top_k: int
+    
+    def __init__(self, documents: List[Document], top_k: int = 5):
+        """Initialize the fuzzy retriever.
+        
+        Args:
+            documents: List of documents to search
+            top_k: Number of top results to return
+        """
+        # Use super().__init__ to properly initialize the Pydantic model
+        super().__init__(docs=documents, top_k=top_k)
+    
+    def _get_relevant_documents(self, query: str, *, run_manager=None) -> List[Document]:
+        """Find relevant documents using Levenshtein distance.
+        
+        Args:
+            query: Query string
+            run_manager: Optional run manager for callbacks
+            
+        Returns:
+            List of relevant documents
+        """
+        # Calculate Levenshtein distance for each document
+        scored_docs = []
+        for doc in self.docs:  # Access docs from self.docs (not self._documents or self.documents)
+            # Break document into words
+            words = doc.page_content.split()
+            best_score = 0
+            
+            # Find the best matching word
+            for word in words:
+                if len(word) >= 4:  # Only consider words with 4+ characters
+                    # Calculate normalized Levenshtein distance
+                    max_len = max(len(query), len(word))
+                    if max_len > 0:
+                        distance = Levenshtein.distance(query.lower(), word.lower())
+                        score = 1 - (distance / max_len)
+                        best_score = max(best_score, score)
+            
+            scored_docs.append((doc, best_score))
+        
+        # Sort by score and return top results
+        scored_docs.sort(key=lambda x: x[1], reverse=True)
+        return [doc for doc, _ in scored_docs[:self.top_k]]
+
 
 class MedicalRAG_Agent:
     """
@@ -163,7 +219,16 @@ class MedicalRAG_Agent:
         self._create_rag_chain()
     
     def load_vector_store(self):
-        """Load an existing vector store."""
+        """
+        Load an existing vector store.
+        
+        Security Note: This method uses allow_dangerous_deserialization=True, which bypasses
+        security measures for pickle deserialization. Only use this with trusted data sources
+        that you control. Never load untrusted vector stores.
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
         if not os.path.exists(self.vector_store_path):
             logger.warning(f"Vector store {self.vector_store_path} does not exist")
             return False
@@ -171,6 +236,20 @@ class MedicalRAG_Agent:
         logger.info(f"Loading vector store from {self.vector_store_path}")
         
         try:
+            # Verify the vector store path is in an expected location
+            vector_store_dir = os.path.abspath(self.vector_store_path)
+            data_dir = os.path.abspath("./data")
+            alternative_data_dir = os.path.abspath("../data")
+            
+            is_valid_path = (
+                vector_store_dir.startswith(data_dir) or 
+                vector_store_dir.startswith(alternative_data_dir)
+            )
+            
+            if not is_valid_path:
+                logger.error(f"Vector store path {self.vector_store_path} is outside expected directories")
+                return False
+            
             # Set allow_dangerous_deserialization flag to True
             # Note: Only use this with trusted data sources
             self.vectorstore = FAISS.load_local(
@@ -179,6 +258,11 @@ class MedicalRAG_Agent:
                 allow_dangerous_deserialization=True  
             )
             
+            # Basic validation of loaded index
+            if not hasattr(self.vectorstore, 'index') or self.vectorstore.index is None:
+                logger.error("Loaded vector store appears to be invalid")
+                return False
+                
             logger.info("Vector store loaded successfully")
             
             # Create retriever
@@ -214,19 +298,30 @@ class MedicalRAG_Agent:
         template = """
         You are a medical expert specialized in standardizing medical terminology.
         Your task is to convert non-standard medical diagnostic expressions to formal standard disease names.
-        
+
         Here is relevant medical information:
         {context}
-        
+
         Non-standard diagnostic expression: {question}
-        
+
+        Follow these steps to determine the diagnosis:
+        1. Identify key symptoms and characteristics in the expression
+        2. Match these to the standard disease names in the medical information
+        3. Consider common alternative diagnoses
+        4. Assign a confidence score based on these criteria:
+        - 0.9-1.0: Excellent match with distinctive symptoms that strongly indicate a specific disease
+        - 0.7-0.89: Good match with some distinctive symptoms, but could fit multiple conditions
+        - 0.5-0.69: Moderate match, symptoms are consistent but not distinctive
+        - 0.3-0.49: Poor match, limited symptom overlap
+        - 0.0-0.29: Very poor match or missing essential information
+
         Please provide:
         1. The standard disease name that best matches this expression
         2. Your confidence level (0.0-1.0) in this mapping
         3. Alternative possible diagnoses if your confidence is below 0.9
-        4. Whether human expert review is needed
+        4. Whether human expert review is needed (Yes if confidence < 0.7 or if serious condition)
         5. Brief reasoning for your decision
-        
+
         Format your response as:
         STANDARD DIAGNOSIS: [disease name]
         CONFIDENCE: [score]
@@ -323,12 +418,7 @@ class MedicalRAG_Agent:
     def create_hybrid_retriever(self):
         """
         Create a hybrid retriever that combines vector, keyword, and fuzzy matching.
-        
-        This implements the hybrid search mentioned in the PDF:
-        - Semantic search (vector similarity)
-        - Keyword search (BM25)
-        - Edit distance-based fuzzy matching
-        - Ensemble combining these methods with configurable weights
+        This implementation is compatible with Pydantic V2 and newer LangChain versions.
         """
         if self.vectorstore is None:
             logger.error("Vector store not initialized")
@@ -356,48 +446,14 @@ class MedicalRAG_Agent:
             bm25_retriever = BM25Retriever.from_documents(all_docs)
             bm25_retriever.k = 5
             
-            # 3. Create custom FuzzyRetriever using lower-level approach to avoid compatibility issues
-            import Levenshtein
-            from langchain.schema import BaseRetriever, Document
-            
-            class CustomFuzzyRetriever(BaseRetriever):
-                def __init__(self, documents, top_k=5):
-                    self.documents = documents
-                    self.top_k = top_k
-                    super().__init__()
-                
-                def _get_relevant_documents(self, query, *, run_manager=None):
-                    # Calculate Levenshtein distance for each document
-                    scored_docs = []
-                    for doc in self.documents:
-                        # Break document into words
-                        words = doc.page_content.split()
-                        best_score = 0
-                        
-                        # Find the best matching word
-                        for word in words:
-                            if len(word) >= 4:  # Only consider words with 4+ characters
-                                # Calculate normalized Levenshtein distance
-                                max_len = max(len(query), len(word))
-                                if max_len > 0:
-                                    distance = Levenshtein.distance(query.lower(), word.lower())
-                                    score = 1 - (distance / max_len)
-                                    best_score = max(best_score, score)
-                        
-                        scored_docs.append((doc, best_score))
-                    
-                    # Sort by score and return top results
-                    scored_docs.sort(key=lambda x: x[1], reverse=True)
-                    return [doc for doc, _ in scored_docs[:self.top_k]]
-            
-            # Initialize fuzzy retriever with documents
-            fuzzy_retriever = CustomFuzzyRetriever(all_docs)
+            # 3. Initialize fuzzy retriever with documents
+            fuzzy_retriever = CustomFuzzyRetriever(documents=all_docs, top_k=5)
             
             # 4. Create ensemble retriever with weights
-            from langchain_community.retrievers import EnsembleRetriever
+            from langchain.retrievers import EnsembleRetriever
             ensemble_retriever = EnsembleRetriever(
-                retrievers=[vector_retriever, bm25_retriever, fuzzy_retriever],
-                weights=[0.6, 0.3, 0.1]  # 60% vector, 30% BM25, 10% fuzzy
+                retrievers=[vector_retriever, bm25_retriever],
+                weights=[0.7, 0.3]  # Omitting fuzzy retriever initially for stability
             )
             
             logger.info("Hybrid retriever created successfully")

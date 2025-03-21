@@ -116,7 +116,8 @@ class FeedbackManager:
         query: str,
         system_diagnosis: str,
         confidence_score: float,
-        alternative_diagnoses: Optional[List[str]] = None
+        alternative_diagnoses: Optional[List[str]] = None,
+        priority: str = None
     ) -> bool:
         """
         Queue a case for expert review in the active learning system.
@@ -126,16 +127,18 @@ class FeedbackManager:
             system_diagnosis: Diagnosis provided by the system
             confidence_score: System's confidence score
             alternative_diagnoses: List of alternative diagnoses
+            priority: Priority level ("high_priority", "medium_priority", or None for auto-determination)
             
         Returns:
             bool: Success status
         """
         try:
-            # Determine priority based on confidence score
-            if confidence_score < 0.7:
-                priority = "high_priority"
-            else:
-                priority = "medium_priority"
+            # Determine priority based on confidence score if not explicitly specified
+            if priority is None:
+                if confidence_score < 0.7:
+                    priority = "high_priority"
+                else:
+                    priority = "medium_priority"
             
             # Create queue entry
             entry = {
@@ -150,11 +153,17 @@ class FeedbackManager:
             with open(self.active_learning_file, "r") as f:
                 queue = json.load(f)
             
-            # Check if already in queue
-            existing_queries = [item["query"] for item in queue[priority]]
-            if query not in existing_queries:
+            # Check if already in queue or review_complete
+            existing_queries = [item["query"] for item in queue.get(priority, [])]
+            completed_queries = queue.get("review_complete", [])
+            
+            if query not in existing_queries and query not in completed_queries:
+                # Make sure the priority queue exists
+                if priority not in queue:
+                    queue[priority] = []
+                    
                 queue[priority].append(entry)
-                
+                    
                 # Save updated queue
                 with open(self.active_learning_file, "w") as f:
                     json.dump(queue, f, indent=2)

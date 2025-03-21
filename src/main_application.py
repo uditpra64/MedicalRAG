@@ -184,13 +184,30 @@ class MedicalDiseaseNameSearchSystem:
             # Store last confidence score for feedback
             self.last_confidence_score = parsed_result['confidence_score']
 
-            # Queue for expert review if confidence is low or needs human review
-            if parsed_result['confidence_score'] < 0.9 or parsed_result.get('needs_human_review', False):
+            # Queue for expert review based on confidence and severity
+            needs_review = parsed_result.get('needs_human_review', False)
+            critical_condition = self._is_critical_condition(parsed_result['standard_diagnosis'])
+            low_confidence = parsed_result['confidence_score'] < 0.7
+            moderate_confidence = 0.7 <= parsed_result['confidence_score'] < 0.85
+            
+            # Determine queue priority
+            if low_confidence or (critical_condition and parsed_result['confidence_score'] < 0.9):
+                # High priority: Low confidence OR critical condition with < 0.9 confidence
                 self.feedback_manager.queue_for_expert_review(
                     query=expression,
                     system_diagnosis=parsed_result['standard_diagnosis'],
                     confidence_score=parsed_result['confidence_score'],
-                    alternative_diagnoses=parsed_result.get('alternative_diagnoses', [])
+                    alternative_diagnoses=parsed_result.get('alternative_diagnoses', []),
+                    priority="high_priority"
+                )
+            elif needs_review or (moderate_confidence and critical_condition):
+                # Medium priority: Marked for review OR moderate confidence for critical conditions
+                self.feedback_manager.queue_for_expert_review(
+                    query=expression,
+                    system_diagnosis=parsed_result['standard_diagnosis'],
+                    confidence_score=parsed_result['confidence_score'],
+                    alternative_diagnoses=parsed_result.get('alternative_diagnoses', []),
+                    priority="medium_priority"
                 )
 
             return parsed_result
@@ -205,6 +222,26 @@ class MedicalDiseaseNameSearchSystem:
                 "reasoning": f"Error: {str(e)}",
                 "error": str(e)
             }
+            
+    def _is_critical_condition(self, disease_name: str) -> bool:
+        """
+        Determine if a disease is a critical condition requiring careful review.
+        
+        Args:
+            disease_name: Standard disease name
+            
+        Returns:
+            bool: True if critical condition, False otherwise
+        """
+        critical_conditions = [
+            "myocardial infarction", "heart attack", 
+            "stroke", "cerebrovascular accident",
+            "pulmonary embolism", "sepsis",
+            "meningitis", "encephalitis",
+            "pneumonia", "covid"
+        ]
+        
+        return any(critical in disease_name.lower() for critical in critical_conditions)
             
     def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """

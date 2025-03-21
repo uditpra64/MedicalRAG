@@ -56,7 +56,7 @@ class MedicalOntologyManager:
     
     def _load_snomed_ct(self, folder_path: str) -> bool:
         """
-        Load SNOMED CT data from folder.
+        Load SNOMED CT data from folder with improved file detection.
         
         Args:
             folder_path: Path to SNOMED CT data folder
@@ -65,37 +65,79 @@ class MedicalOntologyManager:
             bool: Success status
         """
         try:
-            # SNOMED CT typically has multiple files - concepts, descriptions, relationships
-            concept_file = os.path.join(folder_path, "sct2_Concept_Full.txt")
-            description_file = os.path.join(folder_path, "sct2_Description_Full.txt")
-            
-            if os.path.exists(concept_file) and os.path.exists(description_file):
-                # Load concept file
-                concepts = pd.read_csv(
-                    concept_file, 
-                    sep='\t',
-                    encoding='utf-8'
-                )
-                
-                # Load descriptions
-                descriptions = pd.read_csv(
-                    description_file,
-                    sep='\t',
-                    encoding='utf-8'
-                )
-                
-                # Store both dataframes
-                self.snomed_data = {
-                    "concepts": concepts,
-                    "descriptions": descriptions
-                }
-                
-                logger.info(f"Loaded SNOMED CT data: {len(concepts)} concepts, {len(descriptions)} descriptions")
-                return True
-            else:
-                logger.warning(f"SNOMED CT files not found in {folder_path}")
+            # Check if directory exists
+            if not os.path.isdir(folder_path):
+                logger.warning(f"SNOMED CT folder not found: {folder_path}")
                 return False
                 
+            # Look for SNOMED CT files - handle different naming conventions
+            concept_files = [
+                "sct2_Concept_Full.txt",
+                "sct2_Concept_Snapshot.txt",
+                "Concept.txt",
+                "concepts.txt"
+            ]
+            
+            description_files = [
+                "sct2_Description_Full.txt",
+                "sct2_Description_Snapshot.txt",
+                "Description.txt",
+                "descriptions.txt"
+            ]
+            
+            # Find concept file
+            concept_file = None
+            for fname in concept_files:
+                path = os.path.join(folder_path, fname)
+                if os.path.exists(path):
+                    concept_file = path
+                    break
+                    
+            # Find description file
+            description_file = None
+            for fname in description_files:
+                path = os.path.join(folder_path, fname)
+                if os.path.exists(path):
+                    description_file = path
+                    break
+                    
+            if concept_file and description_file:
+                # Load concept file
+                try:
+                    concepts = pd.read_csv(
+                        concept_file, 
+                        sep='\t',
+                        encoding='utf-8',
+                        on_bad_lines='skip'  # Skip bad lines (updated from error_bad_lines)
+                    )
+                    
+                    # Load descriptions
+                    descriptions = pd.read_csv(
+                        description_file,
+                        sep='\t',
+                        encoding='utf-8',
+                        on_bad_lines='skip'  # Skip bad lines
+                    )
+                    
+                    # Store both dataframes
+                    self.snomed_data = {
+                        "concepts": concepts,
+                        "descriptions": descriptions
+                    }
+                    
+                    logger.info(f"Loaded SNOMED CT data: {len(concepts)} concepts, {len(descriptions)} descriptions")
+                    return True
+                except Exception as e:
+                    logger.error(f"Error reading SNOMED CT files: {e}")
+                    return False
+            else:
+                try:
+                    files_found = os.listdir(folder_path)[:5]  # Show first 5 files
+                    logger.warning(f"SNOMED CT files not found in {folder_path}. Files found: {files_found}")
+                except Exception:
+                    logger.warning(f"SNOMED CT files not found in {folder_path} and directory listing failed")
+                return False
+                    
         except Exception as e:
             logger.error(f"Error loading SNOMED CT data: {e}")
             return False

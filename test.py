@@ -35,7 +35,7 @@ def setup_test_environment():
     print("Test environment setup complete!")
 
 def create_sample_database(filename="data/sample_medical_database.csv"):
-    """Create a sample medical database for testing."""
+    """Create a sample medical database for testing with enhanced data."""
     if os.path.exists(filename):
         print(f"Using existing database: {filename}")
         return filename
@@ -46,52 +46,71 @@ def create_sample_database(filename="data/sample_medical_database.csv"):
         {
             "standard_disease_name": "Type 2 Diabetes Mellitus",
             "description": "A metabolic disorder characterized by high blood sugar, insulin resistance, and relative lack of insulin.",
-            "synonyms": "adult-onset diabetes, non-insulin-dependent diabetes mellitus, NIDDM",
+            "synonyms": "adult-onset diabetes, non-insulin-dependent diabetes mellitus, NIDDM, high blood sugar, hyperglycemia with thirst",
             "icd_code": "E11"
         },
         {
             "standard_disease_name": "Essential Hypertension",
             "description": "Persistently elevated blood pressure in the arteries without identifiable cause.",
-            "synonyms": "high blood pressure, HTN",
+            "synonyms": "high blood pressure, HTN, hypertensive disease, elevated BP",
             "icd_code": "I10"
         },
         {
             "standard_disease_name": "Myocardial Infarction",
             "description": "Death of heart muscle due to prolonged lack of oxygen supply.",
-            "synonyms": "heart attack, MI, cardiac infarction",
+            "synonyms": "heart attack, MI, cardiac infarction, coronary thrombosis, chest pain with radiation, chest pain with numbness",
             "icd_code": "I21"
         },
         {
             "standard_disease_name": "Rheumatoid Arthritis",
             "description": "Autoimmune disease causing chronic inflammation of the joints.",
-            "synonyms": "RA, rheumatoid disease",
+            "synonyms": "RA, rheumatoid disease, inflammatory arthritis, joint pain with morning stiffness",
             "icd_code": "M05"
         },
         {
             "standard_disease_name": "Migraine",
             "description": "Recurrent moderate to severe headache with associated symptoms like nausea and sensitivity to light.",
-            "synonyms": "migraine headache, sick headache, hemicrania",
+            "synonyms": "migraine headache, sick headache, hemicrania, headache with photosensitivity",
             "icd_code": "G43"
         },
         {
             "standard_disease_name": "Asthma",
             "description": "Chronic lung disease characterized by inflammation and narrowing of the airways causing wheezing and shortness of breath.",
-            "synonyms": "bronchial asthma, reactive airway disease",
+            "synonyms": "bronchial asthma, reactive airway disease, wheezing, shortness of breath with allergies",
             "icd_code": "J45"
         },
         {
             "standard_disease_name": "Community-acquired Pneumonia",
-            "description": "Infection of the lungs acquired outside of healthcare settings.",
-            "synonyms": "CAP, bacterial pneumonia, atypical pneumonia",
+            "description": "Infection of the lungs acquired outside of healthcare settings, characterized by fever, cough, chest pain, and difficulty breathing.",
+            "synonyms": "CAP, bacterial pneumonia, atypical pneumonia, lung infection, chest infection with fever",
             "icd_code": "J18"
         },
         {
             "standard_disease_name": "Generalized Anxiety Disorder",
             "description": "Excessive, persistent worry and anxiety that interferes with daily activities.",
-            "synonyms": "GAD, anxiety neurosis, chronic anxiety",
+            "synonyms": "GAD, anxiety neurosis, chronic anxiety, persistent worry",
             "icd_code": "F41.1"
+        },
+        {
+            "standard_disease_name": "Acute Bronchitis",
+            "description": "Inflammation of the bronchial tubes usually caused by viral infection, resulting in cough and sometimes shortness of breath.",
+            "synonyms": "chest cold, bronchial infection, acute cough illness",
+            "icd_code": "J20"
+        },
+        {
+            "standard_disease_name": "Stable Angina",
+            "description": "Chest pain or discomfort that occurs when the heart muscle doesn't get enough oxygen-rich blood, typically triggered by physical exertion.",
+            "synonyms": "angina pectoris, effort angina, chest pain with exertion",
+            "icd_code": "I20.8"
         }
     ]
+    
+    df = pd.DataFrame(data)
+    os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
+    df.to_csv(filename, index=False)
+    
+    print(f"Created sample database with {len(df)} entries")
+    return filename
     
     df = pd.DataFrame(data)
     os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
