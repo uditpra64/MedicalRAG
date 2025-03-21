@@ -122,7 +122,7 @@ def main():
     system = MedicalDiseaseNameSearchSystem(
         embedding_model_name="cambridgeltl/SapBERT-from-PubMedBERT-fulltext",
         vector_db_path="data/vector_stores/sapbert_faiss",
-        llm_model_name="gpt-35-turbo",  # Azure deployment name
+        llm_model_name="gptest",  # Azure deployment name
         api_key=api_key,
         api_version="2024-02-15-preview",
         azure_endpoint="https://formaigpt.openai.azure.com"
