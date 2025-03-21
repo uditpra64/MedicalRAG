@@ -1,0 +1,24 @@
+2025-03-21 17:36:21,574 - INFO - [root:67] - Logging initialized
+2025-03-21 17:36:21,601 - INFO - [root:16] - Configuration loaded from config/app_config.yaml
+2025-03-21 17:36:27,602 - WARNING - [root:91] - AZURE_OPENAI_API_KEY environment variable not set
+2025-03-21 17:36:27,603 - INFO - [root:105] - Using Azure OpenAI with model gpt-35-turbo
+2025-03-21 17:36:27,604 - INFO - [root:109] - Initializing Medical Disease Name Search System
+2025-03-21 17:36:27,604 - INFO - [src.main_application:48] - Initializing Medical Disease Name Search System with cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+2025-03-21 17:36:27,605 - INFO - [src.main_application:65] - Using device: cpu
+2025-03-21 17:36:27,605 - INFO - [src.azure_openai_wrapper:40] - Using Azure OpenAI deployment: gpt-35-turbo
+2025-03-21 17:36:28,407 - INFO - [src.main_application:98] - Azure OpenAI LLM initialized: gpt-35-turbo
+2025-03-21 17:36:28,408 - INFO - [src.medical_rag_agent:40] - Initializing Medical RAG Agent with model: cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+2025-03-21 17:36:52,065 - INFO - [sentence_transformers.SentenceTransformer:218] - Load pretrained SentenceTransformer: cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+2025-03-21 17:36:52,323 - WARNING - [sentence_transformers.SentenceTransformer:1524] - No sentence-transformers model found with name cambridgeltl/SapBERT-from-PubMedBERT-fulltext. Creating a new one with mean pooling.
+2025-03-21 17:36:53,935 - INFO - [src.main_application:107] - Medical RAG initialized
+2025-03-21 17:36:53,936 - INFO - [src.medical_rag_agent:171] - Loading vector store from ./data/vector_stores/sapbert_faiss
+2025-03-21 17:36:53,942 - INFO - [faiss.loader:125] - Loading faiss with AVX2 support.
+2025-03-21 17:36:53,963 - INFO - [faiss.loader:127] - Successfully loaded faiss with AVX2 support.
+2025-03-21 17:36:53,974 - INFO - [faiss:185] - Failed to load GPU Faiss: name 'GpuIndexIVFFlat' is not defined. Will not load constructor refs for GPU indexes.
+2025-03-21 17:36:53,975 - INFO - [src.medical_rag_agent:182] - Vector store loaded successfully
+2025-03-21 17:36:53,975 - INFO - [src.medical_rag_agent:337] - Creating hybrid retriever
+2025-03-21 17:36:53,987 - WARNING - [src.medical_rag_agent:206] - Could not create hybrid retriever: 'FAISS' object has no attribute 'get'. Falling back to vector retriever.
+2025-03-21 17:36:53,989 - INFO - [src.main_application:113] - Loaded existing vector store from ./data/vector_stores/sapbert_faiss
+2025-03-21 17:36:53,990 - WARNING - [src.medical_ontology:31] - ICD-10 data path not provided or does not exist: None
+2025-03-21 17:36:53,990 - WARNING - [src.medical_ontology:37] - SNOMED CT data path not provided or does not exist: None
+2025-03-21 17:36:53,991 - INFO - [root:152] - Launching Streamlit UI

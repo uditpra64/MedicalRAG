@@ -1,0 +1,3 @@
+timestamp,query,system_diagnosis,expert_diagnosis,confidence_score,is_correct,expert_notes
+2025-03-21T19:16:03.486736,high blood sugar with excessive thirst,Type 2 Diabetes Mellitus,Type 2 Diabetes Mellitus,0.85,True,"Clear symptoms of Type 2 Diabetes, correct identification."
+2025-03-21T19:16:03.520369,constant chest pain with left arm numbness,Myocardial Infarction,Stable Angina,0.85,False,Symptoms more consistent with stable angina than MI.

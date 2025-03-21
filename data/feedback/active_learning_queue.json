@@ -1,0 +1,19 @@
+{
+  "high_priority": [],
+  "medium_priority": [
+    {
+      "timestamp": "2025-03-21T19:16:03.407402",
+      "query": "joint pain and stiffness in the morning",
+      "system_diagnosis": "Rheumatoid Arthritis",
+      "confidence_score": 0.85,
+      "alternative_diagnoses": [
+        "Osteoarthritis",
+        "Lupus"
+      ]
+    }
+  ],
+  "review_complete": [
+    "high blood sugar with excessive thirst",
+    "constant chest pain with left arm numbness"
+  ]
+}

@@ -1,0 +1,22 @@
+2025-03-21 17:05:52,524 - INFO - [root:67] - Logging initialized
+2025-03-21 17:05:52,533 - INFO - [root:16] - Configuration loaded from config/app_config.yaml
+2025-03-21 17:05:57,486 - WARNING - [root:91] - AZURE_OPENAI_API_KEY environment variable not set
+2025-03-21 17:05:57,487 - INFO - [root:105] - Using Azure OpenAI with model gpt-35-turbo
+2025-03-21 17:05:57,488 - INFO - [root:109] - Initializing Medical Disease Name Search System
+2025-03-21 17:05:57,489 - INFO - [src.main_application:48] - Initializing Medical Disease Name Search System with cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+2025-03-21 17:05:57,490 - INFO - [src.main_application:65] - Using device: cpu
+2025-03-21 17:05:57,490 - INFO - [src.azure_openai_wrapper:40] - Using Azure OpenAI deployment: gpt-35-turbo
+2025-03-21 17:05:58,199 - INFO - [src.main_application:98] - Azure OpenAI LLM initialized: gpt-35-turbo
+2025-03-21 17:05:58,199 - INFO - [src.medical_rag_agent:41] - Initializing Medical RAG Agent with model: cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+2025-03-21 17:06:05,882 - INFO - [sentence_transformers.SentenceTransformer:218] - Load pretrained SentenceTransformer: cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+2025-03-21 17:06:06,104 - WARNING - [sentence_transformers.SentenceTransformer:1524] - No sentence-transformers model found with name cambridgeltl/SapBERT-from-PubMedBERT-fulltext. Creating a new one with mean pooling.
+2025-03-21 17:06:07,877 - INFO - [src.main_application:107] - Medical RAG initialized
+2025-03-21 17:06:07,878 - INFO - [src.medical_rag_agent:172] - Loading vector store from ./data/vector_stores/sapbert_faiss
+2025-03-21 17:06:07,885 - INFO - [faiss.loader:125] - Loading faiss with AVX2 support.
+2025-03-21 17:06:07,918 - INFO - [faiss.loader:127] - Successfully loaded faiss with AVX2 support.
+2025-03-21 17:06:07,931 - INFO - [faiss:185] - Failed to load GPU Faiss: name 'GpuIndexIVFFlat' is not defined. Will not load constructor refs for GPU indexes.
+2025-03-21 17:06:07,933 - INFO - [src.medical_rag_agent:183] - Vector store loaded successfully
+2025-03-21 17:06:07,936 - INFO - [src.main_application:113] - Loaded existing vector store from ./data/vector_stores/sapbert_faiss
+2025-03-21 17:06:07,937 - WARNING - [src.medical_ontology:31] - ICD-10 data path not provided or does not exist: None
+2025-03-21 17:06:07,937 - WARNING - [src.medical_ontology:37] - SNOMED CT data path not provided or does not exist: None
+2025-03-21 17:06:07,938 - INFO - [root:152] - Launching Streamlit UI

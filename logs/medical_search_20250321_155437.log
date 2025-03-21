@@ -1,0 +1,17 @@
+2025-03-21 15:54:37,235 - INFO - [root:67] - Logging initialized
+2025-03-21 15:54:37,255 - INFO - [root:16] - Configuration loaded from config/app_config.yaml
+2025-03-21 15:54:45,090 - WARNING - [root:91] - AZURE_OPENAI_API_KEY environment variable not set
+2025-03-21 15:54:45,091 - INFO - [root:105] - Using Azure OpenAI with model gpt-35-turbo
+2025-03-21 15:54:45,093 - INFO - [root:109] - Initializing Medical Disease Name Search System
+2025-03-21 15:54:45,094 - INFO - [src.main_application:42] - Initializing Medical Disease Name Search System with cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+2025-03-21 15:54:45,096 - INFO - [src.main_application:59] - Using device: cpu
+2025-03-21 15:54:45,096 - INFO - [src.azure_openai_wrapper:40] - Using Azure OpenAI deployment: gpt-35-turbo
+2025-03-21 15:54:46,512 - INFO - [src.main_application:75] - Azure OpenAI LLM initialized: gpt-35-turbo
+2025-03-21 15:54:46,514 - INFO - [src.medical_rag_agent:41] - Initializing Medical RAG Agent with model: cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+2025-03-21 15:54:55,239 - INFO - [sentence_transformers.SentenceTransformer:218] - Load pretrained SentenceTransformer: cambridgeltl/SapBERT-from-PubMedBERT-fulltext
+2025-03-21 15:54:55,667 - WARNING - [sentence_transformers.SentenceTransformer:1524] - No sentence-transformers model found with name cambridgeltl/SapBERT-from-PubMedBERT-fulltext. Creating a new one with mean pooling.
+2025-03-21 15:55:01,364 - INFO - [src.main_application:84] - Medical RAG initialized
+2025-03-21 15:55:01,364 - INFO - [src.medical_rag_agent:172] - Loading vector store from ./data/vector_stores/sapbert_faiss
+2025-03-21 15:55:01,365 - ERROR - [src.medical_rag_agent:188] - Error loading vector store: The de-serialization relies loading a pickle file. Pickle files can be modified to deliver a malicious payload that results in execution of arbitrary code on your machine.You will need to set `allow_dangerous_deserialization` to `True` to enable deserialization. If you do this, make sure that you trust the source of the data. For example, if you are loading a file that you created, and know that no one else has modified the file, then this is safe to do. Do not set this to `True` if you are loading a file from an untrusted source (e.g., some random site on the internet.).
+2025-03-21 15:55:01,366 - WARNING - [src.main_application:92] - No vector store found. Use load_data() to create one.
+2025-03-21 15:55:01,367 - INFO - [root:152] - Launching Streamlit UI

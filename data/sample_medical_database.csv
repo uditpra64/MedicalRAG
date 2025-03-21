@@ -1,0 +1,6 @@
+standard_disease_name,description,synonyms,icd_code
+Type 2 Diabetes Mellitus,"A metabolic disorder characterized by high blood sugar, insulin resistance, and relative lack of insulin.","adult-onset diabetes, non-insulin-dependent diabetes mellitus, NIDDM",E11
+Essential Hypertension,Persistently elevated blood pressure in the arteries without identifiable cause.,"high blood pressure, HTN",I10
+Myocardial Infarction,Death of heart muscle due to prolonged lack of oxygen supply.,"heart attack, MI, cardiac infarction",I21
+Rheumatoid Arthritis,Autoimmune disease causing chronic inflammation of the joints.,"RA, rheumatoid disease",M05
+Migraine,Recurrent moderate to severe headache with associated symptoms like nausea and sensitivity to light.,"migraine headache, sick headache, hemicrania",G43
