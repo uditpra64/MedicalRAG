@@ -222,10 +222,6 @@ class MedicalRAG_Agent:
         """
         Load an existing vector store.
         
-        Security Note: This method uses allow_dangerous_deserialization=True, which bypasses
-        security measures for pickle deserialization. Only use this with trusted data sources
-        that you control. Never load untrusted vector stores.
-        
         Returns:
             bool: True if successful, False otherwise
         """
@@ -240,10 +236,12 @@ class MedicalRAG_Agent:
             vector_store_dir = os.path.abspath(self.vector_store_path)
             data_dir = os.path.abspath("./data")
             alternative_data_dir = os.path.abspath("../data")
+            current_dir = os.path.abspath(".")
             
             is_valid_path = (
                 vector_store_dir.startswith(data_dir) or 
-                vector_store_dir.startswith(alternative_data_dir)
+                vector_store_dir.startswith(alternative_data_dir) or
+                vector_store_dir.startswith(current_dir)
             )
             
             if not is_valid_path:
@@ -272,6 +270,8 @@ class MedicalRAG_Agent:
         
         except Exception as e:
             logger.error(f"Error loading vector store: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return False
         
     def _create_rag_chain(self):

@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import torch, torchvision, torchaudio
 
 try:
-    # First check if _classes exists
+    # Check for PyTorch modules that could cause issues with Streamlit
     if hasattr(torch, '_classes'):
         # Create a simple module wrapper to avoid Streamlit's file watcher issues
         class SafeClassesModule:
@@ -27,10 +27,6 @@ try:
             def __getattr__(self, name):
                 # Handle special attributes that Streamlit looks for
                 if name in ('__path__', '__file__', '__loader__', '__package__', '__spec__'):
-                    if name == '__path__':
-                        class EmptyPath:
-                            _path = []
-                        return EmptyPath()
                     return None
                 
                 # For all other attributes, delegate to the original module
@@ -38,10 +34,13 @@ try:
         
         # Apply the patch by replacing the module with our safe wrapper
         torch._classes = SafeClassesModule(torch._classes)
-        print("Applied PyTorch workaround for Streamlit compatibility")
+        
+        # Only log this once, not repeatedly
+        if 'pytorch_workaround_applied' not in st.session_state:
+            print("Applied PyTorch workaround for Streamlit compatibility")
+            st.session_state.pytorch_workaround_applied = True
 except Exception as e:
     print(f"Note: PyTorch workaround not applied: {e}")
-    print("If you encounter Streamlit errors with PyTorch, you may need to update the workaround")
 
 # Now it's safe to import our custom modules
 from src.main_application import MedicalDiseaseNameSearchSystem
@@ -71,14 +70,187 @@ def load_config(config_path):
             "vector_store_path": "../data/vector_stores/sapbert_faiss",
             "llm": {
                 "provider": "azure",
-                "model": "gpt-35-turbo",
+                "model": "gptest",
                 "api_version": "2024-02-15-preview",
                 "azure_endpoint": "https://formaigpt.openai.azure.com"
             },
             "confidence_threshold": 0.7
         }
 
-# Main UI function
+def create_sample_vector_store(system):
+    """
+    Create a sample vector store for testing/demo purposes.
+    
+    Args:
+        system: Initialized MedicalDiseaseNameSearchSystem instance
+        
+    Returns:
+        bool: Success status
+    """
+    # Check if sample medical database exists, create if it doesn't
+    sample_db_path = "data/sample_medical_database.csv"
+    
+    if not os.path.exists(sample_db_path):
+        try:
+            # Create directory if needed
+            os.makedirs(os.path.dirname(sample_db_path), exist_ok=True)
+            
+            # Create a simple sample database
+            sample_data = [
+                {
+                    "standard_disease_name": "Type 2 Diabetes Mellitus",
+                    "description": "A metabolic disorder characterized by high blood sugar, insulin resistance, and relative lack of insulin.",
+                    "synonyms": "adult-onset diabetes, non-insulin-dependent diabetes mellitus, NIDDM, high blood sugar, hyperglycemia with thirst",
+                    "icd_code": "E11"
+                },
+                {
+                    "standard_disease_name": "Essential Hypertension",
+                    "description": "Persistently elevated blood pressure in the arteries without identifiable cause.",
+                    "synonyms": "high blood pressure, HTN, hypertensive disease, elevated BP",
+                    "icd_code": "I10"
+                },
+                {
+                    "standard_disease_name": "Myocardial Infarction",
+                    "description": "Death of heart muscle due to prolonged lack of oxygen supply.",
+                    "synonyms": "heart attack, MI, cardiac infarction, coronary thrombosis, chest pain with radiation, chest pain with numbness",
+                    "icd_code": "I21"
+                },
+                {
+                    "standard_disease_name": "Rheumatoid Arthritis",
+                    "description": "Autoimmune disease causing chronic inflammation of the joints.",
+                    "synonyms": "RA, rheumatoid disease, inflammatory arthritis, joint pain with morning stiffness",
+                    "icd_code": "M05"
+                },
+                {
+                    "standard_disease_name": "Migraine",
+                    "description": "Recurrent moderate to severe headache with associated symptoms like nausea and sensitivity to light.",
+                    "synonyms": "migraine headache, sick headache, hemicrania, headache with photosensitivity",
+                    "icd_code": "G43"
+                }
+            ]
+            
+            import pandas as pd
+            df = pd.DataFrame(sample_data)
+            df.to_csv(sample_db_path, index=False)
+            
+            st.success(f"Created sample medical database with {len(df)} entries")
+            
+        except Exception as e:
+            st.error(f"Error creating sample database: {e}")
+            return False
+    
+    # Now load the data and create vector store
+    try:
+        success = system.load_data(sample_db_path)
+        if success:
+            st.success("Sample vector store created successfully!")
+        else:
+            st.error("Failed to create vector store")
+        return success
+    except Exception as e:
+        st.error(f"Error creating vector store: {e}")
+        return False
+
+def auto_detect_data_paths():
+    """
+    Auto-detect relevant data paths in the project.
+    
+    Returns:
+        dict: Dictionary with detected paths
+    """
+    data_paths = {
+        "vector_store_path": None,
+        "icd10_path": None,
+        "snomed_ct_path": None,
+        "sample_data_path": None
+    }
+    
+    # Look for vector store directories
+    vector_store_paths = [
+        "./data/vector_stores/sapbert_faiss",
+        "../data/vector_stores/sapbert_faiss",
+        "data/vector_stores/sapbert_faiss"
+    ]
+    
+    for path in vector_store_paths:
+        if os.path.exists(path):
+            data_paths["vector_store_path"] = path
+            break
+    
+    # Look for ICD-10 data
+    icd10_paths = [
+        "./data/icd10_codes.csv",
+        "../data/icd10_codes.csv",
+        "data/icd10_codes.csv"
+    ]
+    
+    for path in icd10_paths:
+        if os.path.exists(path):
+            data_paths["icd10_path"] = path
+            break
+    
+    # Look for SNOMED CT directory
+    snomed_paths = [
+        "./data/snomed_ct",
+        "../data/snomed_ct",
+        "data/snomed_ct"
+    ]
+    
+    for path in snomed_paths:
+        if os.path.exists(path) and os.path.isdir(path):
+            data_paths["snomed_ct_path"] = path
+            break
+    
+    # Look for sample medical data
+    sample_data_paths = [
+        "./data/sample_medical_database.csv",
+        "../data/sample_medical_database.csv",
+        "data/sample_medical_database.csv"
+    ]
+    
+    for path in sample_data_paths:
+        if os.path.exists(path):
+            data_paths["sample_data_path"] = path
+            break
+    
+    return data_paths
+
+def add_sample_queries_section(tab):
+    """
+    Add a section with sample queries to help users get started.
+    
+    Args:
+        tab: Streamlit tab to add the section to
+    """
+    with tab.expander("Sample Queries (Click to try)"):
+        st.write("Click on any of these sample queries to try them:")
+        
+        sample_queries = [
+            "high blood sugar with excessive thirst",
+            "constant chest pain with left arm numbness",
+            "recurring headaches with light sensitivity",
+            "joint pain and stiffness in the morning",
+            "persistent elevated blood pressure",
+            "wheezing and shortness of breath triggered by allergens",
+            "fever, cough, and chest pain with difficult breathing"
+        ]
+        
+        # Create columns for the queries
+        cols = st.columns(2)
+        
+        for i, query in enumerate(sample_queries):
+            col = cols[i % 2]
+            if col.button(query, key=f"sample_query_{i}"):
+                # Return to main session state
+                st.session_state.current_query = query
+                # This will be used in the main query tab to populate the text area
+                
+    # Check if a sample query was selected and populate the text area
+    if 'current_query' in st.session_state:
+        return st.session_state.current_query
+    
+    return None
+
 def create_ui():
     """Create a Streamlit UI for the Medical Disease Name Search System."""
     # Page configuration
@@ -98,11 +270,54 @@ def create_ui():
     # Load configuration
     config = load_config(args.config)
     
-    # Main tabs for different sections
-    tabs = st.tabs(["Query", "Batch Processing", "Expert Review", "Analytics", "Settings"])
-
-    # Sidebar for configuration
+    # Auto-detect data paths
+    detected_paths = auto_detect_data_paths()
+    
+    # Initialize session state variables if they don't exist
+    if 'system_initialized' not in st.session_state:
+        st.session_state.system_initialized = False
+    
+    if 'show_setup_guide' not in st.session_state:
+        st.session_state.show_setup_guide = not st.session_state.system_initialized
+    
+    # Sidebar for system status and configuration
     with st.sidebar:
+        st.header("System Status")
+        
+        # Show system status
+        if 'system' in st.session_state and st.session_state.system_initialized:
+            st.success("✅ System initialized")
+            
+            if hasattr(st.session_state.system, 'medical_rag') and hasattr(st.session_state.system.medical_rag, 'vectorstore') and st.session_state.system.medical_rag.vectorstore is not None:
+                st.success("✅ Vector store loaded")
+            else:
+                st.warning("⚠️ Vector store not loaded")
+                if st.button("Create Sample Vector Store"):
+                    with st.spinner("Creating sample vector store..."):
+                        create_sample_vector_store(st.session_state.system)
+            
+            # Button to reset system
+            if st.button("Reset System"):
+                del st.session_state.system
+                st.session_state.system_initialized = False
+                st.experimental_rerun()
+        else:
+            st.warning("⚠️ System not initialized")
+            
+            # Option to show setup guide
+            if st.checkbox("Show Setup Guide", value=st.session_state.show_setup_guide):
+                st.session_state.show_setup_guide = True
+                st.info("""
+                To get started:
+                1. Configure settings below
+                2. Click 'Initialize System'
+                3. Create or load a vector store
+                4. You're ready to use the system!
+                """)
+            else:
+                st.session_state.show_setup_guide = False
+        
+        # Configuration section
         st.header("Configuration")
         
         # LLM Provider selection
@@ -162,16 +377,13 @@ def create_ui():
         # Vector DB path
         vector_db_path = st.text_input(
             "Vector Database Path",
-            value=config["vector_store_path"]
+            value=detected_paths["vector_store_path"] or config["vector_store_path"]
         )
         
-        # Confidence threshold
-        confidence_threshold = st.slider(
-            "Confidence Threshold",
-            min_value=0.0,
-            max_value=1.0,
-            value=config["confidence_threshold"],
-            step=0.05
+        # ICD-10 path
+        icd10_path = st.text_input(
+            "ICD-10 Database Path", 
+            value=detected_paths["icd10_path"] or config.get("data", {}).get("icd10_database", "./data/icd10_codes.csv")
         )
         
         # Initialize button
@@ -190,7 +402,8 @@ def create_ui():
                         system_config = {
                             "embedding_model_name": embedding_model,
                             "vector_db_path": vector_db_path,
-                            "api_key": api_key or None
+                            "api_key": api_key or None,
+                            "icd10_path": icd10_path if os.path.exists(icd10_path) else None
                         }
                         
                         # Add provider-specific parameters
@@ -209,9 +422,19 @@ def create_ui():
                         # Store in session state
                         st.session_state.system = system
                         st.session_state.llm_provider = llm_provider
-                        st.success("System initialized successfully!")
+                        st.session_state.system_initialized = True
+                        
+                        # Check if vector store was loaded
+                        if (hasattr(system.medical_rag, 'vectorstore') and 
+                            system.medical_rag.vectorstore is not None):
+                            st.success("System initialized with vector store!")
+                        else:
+                            st.warning("System initialized but no vector store was loaded.")
+                            st.info("Use the 'Create Sample Vector Store' button or upload your own data.")
                     except Exception as e:
                         st.error(f"Error initializing system: {e}")
+                        # Provide more detailed error information
+                        st.expander("Error Details").write(str(e))
         
         # Data upload section
         st.header("Data Management")
@@ -223,7 +446,7 @@ def create_ui():
         
         if uploaded_file is not None:
             if st.button("Process Data"):
-                if 'system' not in st.session_state:
+                if 'system' not in st.session_state or not st.session_state.system_initialized:
                     st.error("Please initialize the system first")
                 else:
                     with st.spinner("Processing data..."):
@@ -243,30 +466,37 @@ def create_ui():
                         if os.path.exists(temp_path):
                             os.remove(temp_path)
     
+    # Main tabs for different sections
+    tabs = st.tabs(["Query", "Batch Processing", "Expert Review", "Analytics", "Settings"])
+
     # Tab 1: Query Input (Main functionality)
     with tabs[0]:
-        input_col, results_col = st.columns([1, 1])
-        
-        with input_col:
-            st.header("Query Input")
+        if not st.session_state.system_initialized:
+            st.warning("⚠️ System not initialized. Please initialize the system from the sidebar.")
+        else:
+
+            # Add sample queries section
+            current_query = add_sample_queries_section(st)           
+            input_col, results_col = st.columns([1, 1])
             
-            # Single query mode
-            query = st.text_area(
-                "Enter non-standard medical expression",
-                height=100,
-                placeholder="e.g., high blood sugar, chest pain with shortness of breath"
-            )
+            with input_col:
+                st.header("Query Input")
+                
+                # Single query mode
+                query = st.text_area(
+                    "Enter non-standard medical expression",
+                    value=current_query if current_query else "",
+                    height=100,
+                    placeholder="e.g., high blood sugar, chest pain with shortness of breath"
+                )
+                
+                process_button = st.button("Process Query")
             
-            process_button = st.button("Process Query")
-        
-        with results_col:
-            st.header("Results")
-            
-            # Handle query processing (existing code)
-            if process_button and query:
-                if 'system' not in st.session_state:
-                    st.error("Please initialize the system first")
-                else:
+            with results_col:
+                st.header("Results")
+                
+                # Handle query processing
+                if process_button and query:
                     with st.spinner("Processing query..."):
                         try:
                             # Process the query
@@ -359,6 +589,7 @@ def create_ui():
                                         st.error("System not initialized properly for feedback")
                         except Exception as e:
                             st.error(f"Error processing query: {e}")
+    
     
     # Tab 2: Batch Processing
     with tabs[1]:
